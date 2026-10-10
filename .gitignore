@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv*/
+venv*/
+artifacts/
+models/
+*.onnx
+*.onnx.data
+*.rknn
+*.rkllm
+*.safetensors
+*.npy
+*.npz
+*.flac
+*.wav
+*.whl
+reports/

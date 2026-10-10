@@ -1,0 +1,15 @@
+qwen3-asr conversion and validation tools
+Copyright 2026 qwen3-asr contributors
+
+This repository's original source code is licensed under Apache License 2.0.
+
+The scripts import the official qwen-asr Python package by the Alibaba Qwen
+team (Apache License 2.0) and Transformers by Hugging Face (Apache License 2.0).
+Official Qwen/Qwen3-ASR-0.6B model weights have their own Apache-2.0 license.
+Those packages and model weights are not bundled in this repository.
+
+RKNN Toolkit2 and RKLLM Toolkit are separately distributed Rockchip software;
+their own license terms apply. They are not relicensed by this repository.
+
+The public OpenAI Whisper tests/jfk.flac sample is downloaded separately for
+local speech-fixture testing. No audio recording is included in this repository.
