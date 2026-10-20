@@ -1,5 +1,6 @@
 """Compile a fixed two-input encoder ONNX for RK3588 with RKNN Toolkit2."""
 import argparse
+import hashlib
 import importlib.metadata
 import json
 from pathlib import Path
@@ -7,6 +8,14 @@ import time
 import traceback
 
 import numpy as np
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for block in iter(lambda: source.read(8 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def main():
@@ -19,11 +28,17 @@ def main():
     parser.add_argument("--cases", help="Optional directory of independent NPZ goldens for host simulator")
     parser.add_argument("--report", help="JSON stage/simulator report")
     args = parser.parse_args()
+    version = importlib.metadata.version("rknn-toolkit2")
+    if version != "2.5.0":
+        raise RuntimeError(f"Expected RKNN Toolkit2 2.5.0, found {version}")
+    if Path(args.output).exists():
+        raise ValueError(f"Refusing to overwrite output: {args.output}")
     from rknn.api import RKNN
     rknn = RKNN(verbose=args.verbose)
     started = time.monotonic()
     report = {"passed": False, "target": "rk3588", "quantized": False, "output": args.output,
-              "seconds": args.seconds, "toolkit": importlib.metadata.version("rknn-toolkit2"), "steps": {}, "board_inference": "not_run",
+              "seconds": args.seconds, "toolkit": version, "steps": {}, "board_inference": "not_run",
+              "source_onnx_sha256": sha256(args.onnx),
               "simulator": "not_run", "optimization_level": args.optimization_level,
               "cases": [], "limits": {"relative_l2": 0.03, "max_abs": 0.5}}
     def checked(name, result):
@@ -39,6 +54,7 @@ def main():
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         checked("export_rknn", rknn.export_rknn(args.output))
         report["output_bytes"] = Path(args.output).stat().st_size
+        report["sha256"] = sha256(args.output)
         if args.cases:
             checked("init_runtime_simulator", rknn.init_runtime())
             from check_encoder_onnx import metrics

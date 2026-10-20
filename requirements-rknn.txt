@@ -1,0 +1,7 @@
+# Install the CPU torch wheel first from https://download.pytorch.org/whl/cpu.
+torch==2.4.0+cpu
+rknn-toolkit2==2.5.0
+numpy==1.26.4
+onnx==1.18.0
+onnxruntime==1.20.1
+setuptools<81

@@ -202,7 +202,7 @@ class DecoderTests(unittest.TestCase):
         fake_torch = types.SimpleNamespace(set_num_threads=lambda _: None)
         fake_api = types.SimpleNamespace(RKLLM=FakeSDK)
         with mock.patch.object(sys, "argv", args), mock.patch.dict(sys.modules, {"torch": fake_torch, "rkllm.api": fake_api}), \
-             mock.patch.object(converter.importlib.metadata, "version", return_value="unit-test"), mock.patch("builtins.print"), \
+             mock.patch.object(converter.importlib.metadata, "version", side_effect=lambda p: "1.3.1" if p == "rkllm-toolkit" else "unit-test"), mock.patch("builtins.print"), \
              mock.patch.dict(converter.os.environ):
             converter.main()
         result = json.loads((self.root / "compile.json").read_text())
