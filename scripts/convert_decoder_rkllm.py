@@ -55,7 +55,7 @@ def main() -> None:
     if config.get("model_type") != "qwen3" or config.get("architectures") != ["Qwen3ForCausalLM"]:
         raise ValueError("Expected independently extracted Qwen3ForCausalLM decoder")
     if not 32 <= args.max_context <= min(16384, config["max_position_embeddings"]) or args.max_context % 32:
-        raise ValueError("RKLLM 1.2.3 max context must be a multiple of 32 in [32, 16384]")
+        raise ValueError("Max context must be a multiple of 32 in [32, 16384]")
     if args.quant != "fp16" and (args.dataset is None or not args.dataset.is_file()):
         raise ValueError("Quantization requires an explicit calibration dataset")
     if not isinstance(parity.get("decoder_artifacts"), dict) or not parity["decoder_artifacts"]:
@@ -63,6 +63,9 @@ def main() -> None:
     fingerprints = fingerprint_decoder(args.decoder)
     if parity["decoder_artifacts"] != fingerprints:
         raise ValueError("Decoder artifacts changed since numerical parity; rerun the parity checker")
+    version = importlib.metadata.version("rkllm-toolkit")
+    if version != "1.3.1":
+        raise RuntimeError(f"Expected RKLLM Toolkit 1.3.1, found {version}")
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     os.environ.setdefault("OMP_NUM_THREADS", str(args.threads))
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -96,6 +99,8 @@ def main() -> None:
         report["steps"]["load_huggingface"] = ret
         if ret != 0:
             raise RuntimeError(f"RKLLM load_huggingface returned {ret}")
+        loaded_model = getattr(getattr(llm, "base", None), "model", None)
+        report["loaded_model_dtype"] = str(getattr(loaded_model, "dtype", "unavailable"))
         checkpoint("loaded")
         kwargs = {"do_quantization": args.quant != "fp16", "optimization_level": 1,
                   "target_platform": "rk3588", "num_npu_core": 3, "max_context": args.max_context}

@@ -2,8 +2,8 @@
 """Assemble ASR prompt+audio embeddings for RKLLM acoustic-aware calibration.
 
 Supply reference encoder outputs from representative recordings as .npy or
-.npz files. This saves reviewable .npy arrays AND the nested-list JSON required
-by RKLLM 1.2.3; that SDK does not accept a .npy path as input_embed. A small set
+.npz files. This saves reviewable .npy arrays AND the pickled forward kwargs
+indexed by sample/token_nums required by RKLLM 1.3.1. A small set
 of test clips is only smoke calibration and does not validate ASR accuracy.
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -40,13 +41,18 @@ def main() -> None:
     parser.add_argument("--key", default="reference", help="NPZ encoder-output key")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--language", help="Optional forced output language, e.g. English")
+    parser.add_argument("--embedding-dtype", choices=("bfloat16", "float16", "float32"), default="bfloat16",
+                        help="Match the decoder forward dtype used by RKLLM (0.6B checkpoint: bfloat16)")
     parser.add_argument("--target", action="append", help="Optional verified raw ASR target per recording, including desired format/EOS")
     parser.add_argument("--max-context", type=int, default=4096)
     args = parser.parse_args()
+    import torch
     from transformers import AutoTokenizer
     targets = args.target or [""] * len(args.audio_embeddings)
     if len(targets) != len(args.audio_embeddings):
         raise ValueError("Supply one --target for every --audio-embeddings, or omit all targets")
+    if any(targets):
+        raise ValueError("RKLLM 1.3.1 forward-input calibration does not accept target text; omit --target")
     if args.output_dir.exists() and any(args.output_dir.iterdir()):
         raise ValueError(f"Refusing to overwrite nonempty output: {args.output_dir}")
     config = json.loads((args.source / "config.json").read_text())["thinker_config"]
@@ -78,13 +84,26 @@ def main() -> None:
         inputs[0, mask] = audio[0]
         output = args.output_dir / f"inputs_embeds_{index:03d}.npy"
         np.save(output, inputs, allow_pickle=False)
-        dataset.append({"input_embed": inputs.tolist(), "target": target})
+        # Follow Rockchip's make_input_embeds_for_quantize.py: serialize the
+        # kwargs entering the standalone decoder, rather than the ASR wrapper.
+        sample_path = args.output_dir / f"sample_{index:03d}.pkl"
+        forward_inputs = {
+            "inputs_embeds": torch.from_numpy(inputs).to(getattr(torch, args.embedding_dtype)),
+            "attention_mask": torch.ones((1, ids.size), dtype=torch.int64),
+            "position_ids": torch.arange(ids.size, dtype=torch.int64)[None],
+            "use_cache": False,
+        }
+        with sample_path.open("wb") as stream:
+            pickle.dump(forward_inputs, stream)
+        dataset.append({"sample": sample_path.name, "token_nums": int(ids.size)})
         manifest.append({"source_encoder_output": str(path.resolve()), "source_key": args.key,
                          "output": output.name, "shape": list(inputs.shape), "dtype": str(inputs.dtype),
                          "audio_tokens": int(audio.shape[1]), "prompt_token_ids": ids.tolist(),
-                         "has_verified_target": bool(target), "sha256": hashlib.sha256(output.read_bytes()).hexdigest()})
+                         "has_verified_target": bool(target), "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+                         "forward_dtype": args.embedding_dtype,
+                         "sample": sample_path.name, "sample_sha256": hashlib.sha256(sample_path.read_bytes()).hexdigest()})
     (args.output_dir / "data_quant.json").write_text(json.dumps(dataset, separators=(",", ":")) + "\n")
-    report = {"sample_count": len(dataset), "format": "RKLLM 1.2.3 input_embed nested [batch,sequence,hidden] numeric lists",
+    report = {"sample_count": len(dataset), "format": "RKLLM 1.3.1 sample/token_nums JSON indexing pickled model forward kwargs",
               "calibration_scope": "caller-supplied encoder outputs; sample coverage must be evaluated separately",
               "language": args.language, "raw_prompt": prompt, "max_context": args.max_context, "samples": manifest}
     (args.output_dir / "manifest.json").write_text(json.dumps(report, indent=2) + "\n")

@@ -81,13 +81,17 @@ done
 
 FP16 验证是“转换后的 ONNX 相对官方 FP32 参考”的误差测试；不是原生官方 FP16 路径的逐算子等价声明。FP32 导出时没有官方 FP16 分支专用的 residual clamp。
 
-## 4. RKNN Toolkit2 2.3.2
+## 4. RKNN Toolkit2 2.5.0
 
-官方工具链：[2.3.2 x86_64 包和 requirements](https://github.com/airockchip/rknn-toolkit2/tree/v2.3.2/rknn-toolkit2/packages/x86_64)。
-单独创建 `.venv-rknn`，按官方 `requirements_cp312-2.3.2.txt` 安装。若使用 CPU wheel，先从 PyTorch CPU index 安装 `torch==2.4.0+cpu` 并用 constraints 固定，避免 pip 意外下载 CUDA 全套依赖。
+独立创建 `.venv-rknn`；新版仍要求 PyTorch 不高于 2.4.0。
 
-本次使用的 wheel：`rknn_toolkit2-2.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`，SHA-256：
-`504d7fcf6a792dfa874e25155de0afb5d6650f04a1a0d49b0886934bec4741ef`。
+```bash
+python3.12 -m venv .venv-rknn
+.venv-rknn/bin/pip install torch==2.4.0+cpu --index-url https://download.pytorch.org/whl/cpu
+.venv-rknn/bin/pip install -r requirements-rknn.txt
+```
+
+转换器检查版本为 2.5.0，报告记录 ONNX/RKNN SHA-256。本轮路径和结果见 [SDK_UPGRADE.md](SDK_UPGRADE.md)。
 
 ```bash
 for s in 2 4 15; do
@@ -115,7 +119,7 @@ done
 
 保留 decoder 的 BF16 safetensors，额外导出 FP32 `embed_tokens.npy`。等值三平面位置索引使 ASR 的 MRoPE 可改为普通 Qwen3 RoPE；不能将此结论推广到不同 T/H/W 位置的多模态模型。
 
-先按 [RKLLM 工具链说明](RKLLM_TOOLCHAIN_AUDIT.md) 创建独立 `.venv-rkllm`；其 Transformers 4.55.2 与导出环境不同。
+先按 [RKLLM 工具链说明](RKLLM_TOOLCHAIN_AUDIT.md) 创建独立 `.venv-rkllm`；历史文档记录旧版本；本轮使用 `requirements-rkllm.txt` 的 RKLLM 1.3.1 / Transformers 5.8.0，必须与导出环境分开。
 
 ```bash
 .venv-rkllm/bin/python scripts/convert_decoder_rkllm.py \
@@ -137,9 +141,10 @@ done
 ```
 
 转换门禁会验证 parity 报告与当前 decoder 权重、配置、tokenizer、embedding 的 SHA-256 一致，拒绝使用过期报告。
+1.3.1 的校准 JSON 索引 pickle forward kwargs（`sample` / `token_nums`），不再使用旧版嵌套 `input_embed`。
 W8A8 用真实 encoder 输出加官方文本 prompt 的 embedding 做 smoke calibration；同一个英文样本的三种长度不是代表性校准集，不能证明量化后 WER/CER。
 
 ## 6. 尚需板端验证
 
-需要真实 RK3588、匹配的 RKNN runtime/driver 和 RKLLM runtime 1.2.3，验证模型加载、音频/token embedding 输入、KV cache、EOS、识别准确率及延迟。主机导出、simulator 数值通过均不能替代这些步骤。
+需要真实 RK3588、匹配的 RKNN runtime/driver 和 RKLLM runtime 1.3.1，验证模型加载、音频/token embedding 输入、KV cache、EOS、识别准确率及延迟。主机导出、simulator 数值通过均不能替代这些步骤。
 本仓库不包含权重、录音、SDK wheel 或凭据。实际主机测试结果与已知限制见 [VALIDATION.md](VALIDATION.md)。

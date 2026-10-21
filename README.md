@@ -7,7 +7,11 @@
 
 主要测试模型为 `Qwen/Qwen3-ASR-0.6B`。编码器使用 2 秒、4 秒、15 秒静态输入桶；解码器单独转换，不能把整个 ASR 模型的 ONNX 直接当成 RKLLM 输入。
 
-## 实测结果
+## 本轮 SDK 适配
+
+RKNN 2.5.0 / RKLLM 1.3.1 的转换与验证见 [SDK_UPGRADE.md](docs/SDK_UPGRADE.md)。以下结果是旧 SDK 的历史记录。
+
+## 历史实测结果
 
 - 2/4/15 秒 ONNX FP32、FP16：导出、ONNX 检查及数值对比通过
 - 2/4/15 秒 RKNN：RKNN Toolkit2 2.3.2 编译、主机 simulator 数值对比通过
